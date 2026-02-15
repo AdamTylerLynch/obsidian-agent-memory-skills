@@ -1,23 +1,15 @@
----
-description: "Manage your Obsidian agent memory vault — initialize, write session summaries, scaffold projects, create notes, update TODOs, and search vault knowledge."
-argument-hint: "<init|end|project|note|todo|lookup> [args]"
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash(git log:*), Bash(git diff:*), Bash(git rev-parse:*), Bash(git branch:*), Bash(basename:*), Bash(obsidian:*), Bash(date:*), Bash(cp:*), Bash(mkdir:*), Bash(cat:*), Bash(touch:*)
----
+# Command Reference — Detailed Procedures
 
-# /obs-memory — Vault Management Commands (Claude Code)
+This file contains the detailed step-by-step procedures for each obs-memory command. The agent loads this on demand when executing a specific command.
 
-> **Note:** This is the Claude Code-specific command file providing the `/obs-memory` slash command with Claude Code tool permissions and argument hints. For the agent-agnostic skill definition, see `skills/obs-memory/SKILL.md`.
+## Vault Resolution (all commands)
 
-Dispatch based on `$ARGUMENTS[0]`:
-
-## Vault Resolution
-
-Before any subcommand, resolve the vault path:
-1. `$OBSIDIAN_VAULT_PATH` environment variable
-2. Parse from project or global CLAUDE.md (look for "Obsidian Knowledge Vault" section)
+Before any command, resolve the vault path:
+1. Check `$OBSIDIAN_VAULT_PATH` environment variable
+2. Parse from the agent's project or global config (look for "Obsidian Knowledge Vault" section)
 3. Default: `~/Documents/AgentMemory`
 
-Store as `$VAULT`. Verify `$VAULT/Home.md` exists. If not, suggest running `/obs-memory init` to bootstrap the vault.
+Store as `$VAULT`. Verify `$VAULT/Home.md` exists. If not, suggest running `init` to bootstrap the vault.
 
 Detect the current project:
 ```bash
@@ -33,49 +25,38 @@ Bootstrap a new Obsidian Agent Memory vault from the bundled template.
 
 ### Steps:
 
-1. **Determine vault path**: Use `$ARGUMENTS[1]` if provided, otherwise use the vault resolution chain above. If no path resolves, default to `~/Documents/AgentMemory`.
+1. **Determine vault path**: Use the first argument if provided, otherwise use the vault resolution chain above. If no path resolves, default to `~/Documents/AgentMemory`.
 
-2. **Check if vault already exists**:
-   ```
-   Glob: $VAULT/Home.md
-   ```
-   If it exists, tell the user the vault already exists at that path and offer to open it.
+2. **Check if vault already exists**: Look for `$VAULT/Home.md`. If it exists, tell the user the vault already exists at that path and offer to open it.
 
-3. **Locate the bundled template**: The template is at `vault-template/` relative to this skill package. Resolve the plugin directory:
-   ```bash
-   # The plugin is installed at ~/.claude/plugins/cache/obs-memory
-   # or symlinked there — find the real path
-   PLUGIN_DIR="$(cd "$(dirname "$(readlink -f ~/.claude/plugins/cache/obs-memory/setup.sh 2>/dev/null || echo ~/.claude/plugins/cache/obs-memory/setup.sh)")" && pwd)"
-   ```
-   If the template directory doesn't exist at `$PLUGIN_DIR/vault-template/`, search for it:
-   ```
-   Glob: ~/.claude/plugins/**/vault-template/Home.md
-   ```
+3. **Locate the bundled template**: The template is at `vault-template/` relative to the skill package root. Search for the skill package installation directory — it may be in the agent's plugin/skill cache or a local checkout. Look for the `vault-template/Home.md` file to confirm the correct path.
 
 4. **Create the vault**:
    ```bash
    mkdir -p "$VAULT"
-   cp -r "$PLUGIN_DIR/vault-template/"* "$VAULT/"
+   cp -r "$TEMPLATE_DIR/vault-template/"* "$VAULT/"
    ```
 
 5. **Create Obsidian config directory**:
    ```bash
    mkdir -p "$VAULT/.obsidian"
-   cat > "$VAULT/.obsidian/app.json" << 'EOF'
+   ```
+   Write the following to `$VAULT/.obsidian/app.json`:
+   ```json
    {
      "alwaysUpdateLinks": true,
      "newFileLocation": "folder",
      "newFileFolderPath": "inbox",
      "attachmentFolderPath": "attachments"
    }
-   EOF
    ```
 
-6. **Create empty directories with .gitkeep**:
+6. **Create empty directories**:
    ```bash
-   mkdir -p "$VAULT/inbox" && touch "$VAULT/inbox/.gitkeep"
-   mkdir -p "$VAULT/attachments" && touch "$VAULT/attachments/.gitkeep"
+   mkdir -p "$VAULT/inbox"
+   mkdir -p "$VAULT/attachments"
    ```
+   Create `.gitkeep` files in each empty directory.
 
 7. **Report** the created vault and provide next steps:
    - Open in Obsidian: Vault Switcher → Open folder as vault → `$VAULT`
@@ -90,22 +71,16 @@ Write a session summary note and update TODOs.
 
 ### Steps:
 
-1. **Gather session context:**
+1. **Gather session context** by running:
    ```bash
    git log --oneline -20
    git diff --stat HEAD~5..HEAD 2>/dev/null || git diff --stat
    git branch --show-current
    ```
 
-2. **Read current TODOs:**
-   ```
-   Read: $VAULT/todos/Active TODOs.md
-   ```
+2. **Read current TODOs** from `$VAULT/todos/Active TODOs.md`.
 
-3. **Read project overview** (for wikilinks and context):
-   ```
-   Read: $VAULT/projects/$PROJECT/$PROJECT.md
-   ```
+3. **Read project overview** from `$VAULT/projects/$PROJECT/$PROJECT.md` (for wikilinks and context).
 
 4. **Write session note** at `$VAULT/sessions/{YYYY-MM-DD} - {title}.md`:
    ```yaml
@@ -129,7 +104,7 @@ Write a session summary note and update TODOs.
    - Add new items discovered during the session
    - Keep items grouped by project
 
-6. **Update Session Log**: Add an entry to `$VAULT/sessions/Session Log.md`
+6. **Update Session Log**: Add an entry to `$VAULT/sessions/Session Log.md` with the date, project, branch, and a one-line summary.
 
 7. **Report** what was written.
 
@@ -137,17 +112,13 @@ Write a session summary note and update TODOs.
 
 ## `project` — Scaffold New Project
 
-Scaffold a new project in the vault. Uses `$ARGUMENTS[1]` as the project name, or defaults to `$PROJECT`.
+Scaffold a new project in the vault. Uses the first argument as the project name, or defaults to `$PROJECT`.
 
 ### Steps:
 
-1. **Determine project name**: `$ARGUMENTS[1]` or `$PROJECT`
+1. **Determine project name**: Use the argument if provided, otherwise use `$PROJECT`.
 
-2. **Check if project exists**:
-   ```
-   Glob: $VAULT/projects/{name}/{name}.md
-   ```
-   If it exists, tell the user and offer to open it instead.
+2. **Check if project exists**: Look for `$VAULT/projects/{name}/{name}.md`. If it exists, tell the user and offer to open it instead.
 
 3. **Create directory structure**:
    - `$VAULT/projects/{name}/`
@@ -173,7 +144,7 @@ Scaffold a new project in the vault. Uses `$ARGUMENTS[1]` as the project name, o
    - Repo URL from `git remote get-url origin`
    - Link to relevant domains that exist in `$VAULT/domains/`
 
-5. **Update Projects.md**: Add a row to the project table in `$VAULT/projects/Projects.md`
+5. **Update Projects.md**: Add a row to the project table in `$VAULT/projects/Projects.md`.
 
 6. **Report** the scaffolded structure.
 
@@ -181,7 +152,7 @@ Scaffold a new project in the vault. Uses `$ARGUMENTS[1]` as the project name, o
 
 ## `note` — Create a Note from Template
 
-Create a note using a template. `$ARGUMENTS[1]` specifies the type: `component`, `adr`, or `pattern`.
+Create a note using a template. The first argument specifies the type: `component`, `adr`, or `pattern`.
 
 ### `note component [name]`
 
@@ -195,14 +166,11 @@ created: {YYYY-MM-DD}
 ```
 Sections: Purpose, Key Files, Dependencies (Depends On / Depended On By), Gotchas
 
-If `$ARGUMENTS[2]` is provided, use it as the component name. Otherwise, ask the user.
+If a name argument is provided, use it as the component name. Otherwise, ask the user.
 
 ### `note adr [title]`
 
-Determine the next ADR number by listing existing ADRs:
-```
-Glob: $VAULT/projects/$PROJECT/architecture/ADR-*.md
-```
+Determine the next ADR number by listing existing ADRs in `$VAULT/projects/$PROJECT/architecture/ADR-*.md`.
 
 Create at `$VAULT/projects/$PROJECT/architecture/ADR-{NNNN} {title}.md`:
 ```yaml
@@ -227,7 +195,7 @@ created: {YYYY-MM-DD}
 ```
 Sections: Pattern, When to Use, Implementation, Examples
 
-After creating any note, link it from the project overview.
+After creating any note, add a wikilink to it from the project overview.
 
 ---
 
@@ -237,14 +205,11 @@ Open and update the Active TODOs for the current project.
 
 ### Steps:
 
-1. **Read current TODOs**:
-   ```
-   Read: $VAULT/todos/Active TODOs.md
-   ```
+1. **Read current TODOs** from `$VAULT/todos/Active TODOs.md`.
 
 2. **If no additional arguments**: Display the current TODOs for `$PROJECT` and ask what to update.
 
-3. **If arguments provided** (`$ARGUMENTS[1..]`): Parse as a TODO action:
+3. **If arguments provided**: Parse as a TODO action:
    - Plain text → Add as a new pending item under `$PROJECT`
    - `done: <text>` → Move matching item to Completed
    - `remove: <text>` → Remove matching item
@@ -255,14 +220,11 @@ Open and update the Active TODOs for the current project.
 
 ## `lookup` — Search the Vault
 
-Search the vault for knowledge. `$ARGUMENTS[1..]` is the search query.
+Search the vault for knowledge. The remaining arguments form the search query.
 
 ### Steps:
 
-1. **Search by content**:
-   ```
-   Grep: pattern=$QUERY, path=$VAULT, glob="*.md"
-   ```
+1. **Search by content**: Search file contents for the query across all `.md` files in `$VAULT`.
 
 2. **Search by tags** (if query looks like a tag, e.g., starts with `#` or `project/`):
    ```bash
@@ -274,15 +236,6 @@ Search the vault for knowledge. `$ARGUMENTS[1..]` is the search query.
    obsidian vault=$VAULT_NAME backlinks file="$QUERY"
    ```
 
-4. **Present results**: Show matching notes with their frontmatter (first 10 lines) so the user can decide which to read in full.
+4. **Present results**: Show matching notes with their frontmatter (first ~10 lines) so the user can decide which to read in full.
 
 5. **Follow up**: If the user asks to read a specific result, read the full note.
-
----
-
-## Error Handling
-
-- If the vault doesn't exist → suggest running `/obs-memory init` to bootstrap it
-- If the project doesn't exist in the vault → offer to run `/obs-memory project` to scaffold it
-- If a note already exists → show it instead of overwriting, offer to edit
-- If no git repo is detected → use current directory name as project name
