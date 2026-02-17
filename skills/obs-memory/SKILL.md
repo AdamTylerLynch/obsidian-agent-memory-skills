@@ -1,9 +1,9 @@
 ---
 name: obs-memory
-description: "Persistent Obsidian-based memory for coding agents. Use at session start to orient from a knowledge vault, during work to look up architecture/component/pattern notes, and when discoveries are made to write them back. Activate when the user mentions Obsidian vault, agent memory, session notes, knowledge graph, or project architecture. Provides commands: init, end, project, note, todo, lookup."
+description: "Persistent Obsidian-based memory for coding agents. Use at session start to orient from a knowledge vault, during work to look up architecture/component/pattern notes, and when discoveries are made to write them back. Activate when the user mentions Obsidian vault, agent memory, session notes, knowledge graph, or project architecture. Provides commands: init, end, project, note, todo, lookup, relate."
 metadata:
   author: adamtylerlynch
-  version: "1.1"
+  version: "2.0"
 license: MIT
 ---
 
@@ -21,17 +21,23 @@ Resolve the vault path using this chain (first match wins):
 2. **Agent config reference**: Parse the vault path from the agent's project or global config (look for "Obsidian Knowledge Vault" section with a path like `~/Documents/SomeName/`)
 3. **Default**: `~/Documents/AgentMemory`
 
-Store the resolved path as `$VAULT` for all subsequent operations.
+Store the resolved path as `$VAULT` for all subsequent operations. Derive `$VAULT_NAME` as `basename "$VAULT"` for CLI calls.
 
 Verify the vault exists by checking for `$VAULT/Home.md`. If the vault doesn't exist, inform the user and suggest running the `init` command to bootstrap a new vault from the bundled template.
 
 ## Session Start — Orientation
 
-At the start of every session, orient yourself with **at most 2 file reads**:
+At the start of every session, orient yourself with **at most 2 operations**:
 
 ### Step 1: Read TODOs
 
-Read the file at `$VAULT/todos/Active TODOs.md`. Know what's pending, in-progress, and recently completed.
+**CLI-first**:
+```bash
+obsidian vault=$VAULT_NAME tasks path="todos" todo verbose
+```
+**Fallback**: Read the file at `$VAULT/todos/Active TODOs.md`.
+
+Know what's pending, in-progress, and recently completed.
 
 ### Step 2: Detect current project and read its overview
 
@@ -52,26 +58,48 @@ This project overview contains wikilinks to all components, patterns, architectu
 
 ## During Work — Graph Navigation
 
-**Principle: Navigate the graph, don't dump the vault.** Each note contains wikilinks to related notes. Follow links only when the current task requires that context.
+**Principle: Use CLI queries first, file reads second.** The Obsidian CLI provides structured access to properties, links, backlinks, tags, and search — prefer these over reading entire files.
 
-### Follow links, don't bulk-read
+### CLI-first lookups (preferred)
+
+Use these CLI commands for targeted queries without consuming file-read tokens:
+
+```bash
+# Query a component's dependencies
+obsidian vault=$VAULT_NAME property:read file="Component Name" name="depends-on"
+
+# Find what depends on a component
+obsidian vault=$VAULT_NAME property:read file="Component Name" name="depended-on-by"
+obsidian vault=$VAULT_NAME backlinks file="Component Name"
+
+# Find all outgoing links from a note
+obsidian vault=$VAULT_NAME links file="Component Name"
+
+# Find all notes of a type
+obsidian vault=$VAULT_NAME tag verbose name="component"
+
+# Search vault content
+obsidian vault=$VAULT_NAME search format=json query="search term" matches limit=10
+
+# Get note structure without full read
+obsidian vault=$VAULT_NAME outline file="Component Name"
+
+# Read a specific property
+obsidian vault=$VAULT_NAME property:read file="Component Name" name="key-files"
+```
+
+Where `$VAULT_NAME` is the vault folder name (basename of `$VAULT`).
+
+### File-read fallback (when CLI unavailable)
+
+Fall back to file reads when the Obsidian CLI is not available:
 - Need to understand a component? The project overview links to it. Read that one note.
 - Need an architecture decision? The component note or project overview links to it. Follow the link.
 - Need cross-project knowledge? Component/pattern notes link to domain notes. Follow the link.
 - Need session history? Only read if you're stuck or the user references prior work.
 
 ### Frontmatter-first scanning
-When you need to scan multiple notes to find the right one, read just the first ~10 lines of each file. The `tags`, `project`, and `status` fields in the frontmatter tell you if the note is relevant before reading the full body.
-
-### Use Obsidian CLI for targeted lookups
-Instead of reading files, use the CLI when available:
-```bash
-obsidian vault=$VAULT_NAME backlinks file="Component Name"
-obsidian vault=$VAULT_NAME tags name="project/short-name"
-obsidian vault=$VAULT_NAME search query="search term"
-obsidian vault=$VAULT_NAME file path="projects/name/name.md"
-```
-Where `$VAULT_NAME` is the vault folder name (basename of `$VAULT`).
+When you need to scan multiple notes to find the right one, read just the first ~10 lines of each file. The `tags`, `project`, `type`, and `status` fields in the frontmatter tell you if the note is relevant before reading the full body.
 
 ### Directory listing before reading
 List directory contents before reading files — know what exists without consuming tokens:
@@ -105,6 +133,7 @@ Always include in new notes:
 ```yaml
 ---
 tags: [category, project/short-name]
+type: <component|adr|session|project>
 project: "[[projects/{name}/{name}]]"
 created: YYYY-MM-DD
 ---
@@ -121,16 +150,23 @@ created: YYYY-MM-DD
 ```yaml
 ---
 tags: [components, project/{short-name}]
+type: component
 project: "[[projects/{name}/{name}]]"
 created: {date}
+status: active
+layer: ""
+depends-on: []
+depended-on-by: []
+key-files: []
 ---
 ```
-Sections: Purpose, Key Files, Dependencies (Depends On / Depended On By), Gotchas
+Sections: Purpose, Gotchas
 
 **Architecture Decision:**
 ```yaml
 ---
 tags: [architecture, decision, project/{short-name}]
+type: adr
 project: "[[projects/{name}/{name}]]"
 status: proposed | accepted | superseded
 created: {date}
@@ -142,6 +178,7 @@ Sections: Context, Decision, Alternatives Considered, Consequences
 ```yaml
 ---
 tags: [sessions]
+type: session
 projects:
   - "[[projects/{name}/{name}]]"
 created: {date}
@@ -175,8 +212,8 @@ Write a session summary note and update TODOs based on what was accomplished.
 Usage: `end`
 
 1. Gather context from git log, diffs, and current branch
-2. Read current TODOs and project overview
-3. Write a session note at `$VAULT/sessions/{date} - {title}.md` with: Context, Work Done, Discoveries, Decisions, Next Steps
+2. Read current TODOs (CLI: `tasks path="todos" todo verbose`, fallback: file read) and project overview
+3. Write a session note at `$VAULT/sessions/{date} - {title}.md` (CLI: `create` + `property:set` + `append`, fallback: file write) with: Context, Work Done, Discoveries, Decisions, Next Steps
 4. Update `$VAULT/todos/Active TODOs.md` — move completed items, add new ones
 5. Add an entry to `$VAULT/sessions/Session Log.md`
 
@@ -188,7 +225,7 @@ Usage: `project [name]` (defaults to current git repo or directory name)
 
 1. Check if the project already exists in the vault
 2. Create directory structure: `projects/{name}/`, with `architecture/`, `components/`, `patterns/` subdirectories
-3. Create a project overview at `projects/{name}/{name}.md` with auto-detected language, repo URL, and domain links
+3. Create a project overview at `projects/{name}/{name}.md` with `type: project`, `status: active`, auto-detected language, framework, repo URL, and domain links
 4. Update the project index at `projects/Projects.md`
 
 ### `note` — Create a Note from Template
@@ -197,8 +234,8 @@ Create a note using a template.
 
 Usage: `note <component|adr|pattern> [name]`
 
-- **`note component [name]`** — Create at `projects/$PROJECT/components/{name}.md`
-- **`note adr [title]`** — Create at `projects/$PROJECT/architecture/ADR-{NNNN} {title}.md` (auto-numbered)
+- **`note component [name]`** — Create at `projects/$PROJECT/components/{name}.md` with frontmatter properties for `type`, `status`, `layer`, `depends-on`, `depended-on-by`, `key-files`
+- **`note adr [title]`** — Create at `projects/$PROJECT/architecture/ADR-{NNNN} {title}.md` with `type: adr` (auto-numbered)
 - **`note pattern [name]`** — Create at `projects/$PROJECT/patterns/{name}.md`
 
 After creating any note, link it from the project overview.
@@ -216,21 +253,38 @@ Usage: `todo [action]`
 
 ### `lookup` — Search the Vault
 
-Search the vault for knowledge.
+Search the vault for knowledge using targeted subcommands or freetext.
 
-Usage: `lookup <query>`
+Usage: `lookup <subcommand|freetext>`
 
-1. Search file contents matching the query across all `.md` files in `$VAULT`
-2. If the query looks like a tag (starts with `#` or `project/`), search by tags
-3. If the query matches a note name, search by backlinks
-4. Present results with frontmatter context so the user can choose which to read in full
+Subcommands:
+- **`lookup deps <name>`** — Query what a component depends on (`property:read name="depends-on"`)
+- **`lookup consumers <name>`** — Query reverse dependencies (`property:read name="depended-on-by"` + `backlinks`)
+- **`lookup related <name>`** — All connected notes (`links` + `backlinks`)
+- **`lookup type <type> [project]`** — Find notes by type (`tag verbose`)
+- **`lookup layer <layer> [project]`** — Find components by layer (`search`)
+- **`lookup files <component>`** — Key files for a component (`property:read name="key-files"`)
+- **`lookup <freetext>`** — General search (`search format=json matches limit=10`)
+
+All subcommands use CLI-first with file-read fallbacks.
+
+### `relate` — Manage Relationships
+
+Create and query bidirectional relationships between notes via frontmatter properties.
+
+Usage: `relate <subcommand> [args]`
+
+Subcommands:
+- **`relate <source> <target> [type]`** — Create a bidirectional relationship (default: `depends-on`/`depended-on-by`). Always reads current property value first, appends locally, then sets the full list. Supported types: `depends-on`/`depended-on-by`, `extends`/`extended-by`, `implements`/`implemented-by`, `consumes`/`consumed-by`
+- **`relate show <name>`** — Display all relationships for a note (queries all 8 relationship properties + `links` + `backlinks`)
+- **`relate tree <name> [depth]`** — BFS walk of the dependency tree (default depth: 2)
 
 ## Token Budget Rules
 
-1. **Session start**: Read at most 2 files (TODOs + project overview)
-2. **During work**: Follow wikilinks on demand — never read more than the task requires
-3. **Frontmatter first**: When scanning, read ~10 lines before committing to full read
-4. **CLI over reads**: Use `obsidian` CLI for backlinks, tags, and search when available
+1. **CLI over reads**: Use `obsidian` CLI for property reads, backlinks, links, tags, and search — these return targeted data without full file reads
+2. **Session start**: At most 2 operations (TODOs + project overview)
+3. **During work**: Use `lookup` subcommands and `relate show` before reading full notes
+4. **Frontmatter first**: When scanning, read ~10 lines before committing to full read
 5. **List before read**: List directory contents before reading files
 6. **Write concisely**: Bullet points, links, tags — no prose when bullets suffice
 
@@ -240,6 +294,7 @@ Usage: `lookup <query>`
 - If the project doesn't exist in the vault → offer to run `project` to scaffold it
 - If a note already exists → show it instead of overwriting, offer to edit
 - If no git repo is detected → use current directory name as project name
+- If CLI command fails → fall back to file read for the same data
 
 ## Vault Structure Reference
 ```

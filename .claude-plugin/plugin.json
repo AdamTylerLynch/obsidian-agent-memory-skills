@@ -1,7 +1,7 @@
 {
   "name": "obs-memory",
   "description": "Persistent Obsidian-based memory for coding agents. Automatically orients from a knowledge vault at session start, navigates project architecture via graph traversal, and writes discoveries back to the vault.",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "author": {
     "name": "Tyler Lynch"
   },

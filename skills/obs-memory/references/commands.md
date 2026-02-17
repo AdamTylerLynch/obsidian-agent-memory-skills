@@ -17,6 +17,11 @@ basename $(git rev-parse --show-toplevel 2>/dev/null) 2>/dev/null || basename $(
 ```
 Store as `$PROJECT`.
 
+Derive `$VAULT_NAME` (for CLI calls):
+```bash
+VAULT_NAME=$(basename "$VAULT")
+```
+
 ---
 
 ## `init` — Initialize the Vault
@@ -78,14 +83,30 @@ Write a session summary note and update TODOs.
    git branch --show-current
    ```
 
-2. **Read current TODOs** from `$VAULT/todos/Active TODOs.md`.
+2. **Read current TODOs** — CLI-first:
+   ```bash
+   obsidian vault=$VAULT_NAME tasks path="todos" todo verbose
+   ```
+   Fallback: Read `$VAULT/todos/Active TODOs.md`.
 
 3. **Read project overview** from `$VAULT/projects/$PROJECT/$PROJECT.md` (for wikilinks and context).
 
-4. **Write session note** at `$VAULT/sessions/{YYYY-MM-DD} - {title}.md`:
+4. **Write session note** — CLI-first:
+   ```bash
+   obsidian vault=$VAULT_NAME create path="sessions/{YYYY-MM-DD} - {title}" template="Session Note" silent
+   obsidian vault=$VAULT_NAME property:set path="sessions/{YYYY-MM-DD} - {title}" name="type" value="session" type="text"
+   obsidian vault=$VAULT_NAME property:set path="sessions/{YYYY-MM-DD} - {title}" name="branch" value="{current-branch}" type="text"
+   obsidian vault=$VAULT_NAME property:set path="sessions/{YYYY-MM-DD} - {title}" name="projects" value="[[projects/$PROJECT/$PROJECT]]" type="list"
+   ```
+   Then append body content:
+   ```bash
+   obsidian vault=$VAULT_NAME append path="sessions/{YYYY-MM-DD} - {title}" content="..."
+   ```
+   Fallback: Write the file directly at `$VAULT/sessions/{YYYY-MM-DD} - {title}.md`:
    ```yaml
    ---
    tags: [sessions]
+   type: session
    projects:
      - "[[projects/$PROJECT/$PROJECT]]"
    created: {YYYY-MM-DD}
@@ -131,10 +152,13 @@ Scaffold a new project in the vault. Uses the first argument as the project name
    ---
    aliases: []
    tags: [project/{short-name}]
+   type: project
    repo: {git remote url if available}
    path: {working directory}
    language: {detected from files}
+   framework:
    created: {YYYY-MM-DD}
+   status: active
    ---
    ```
    Sections: Architecture, Components, Project Patterns, Architecture Decisions, Domains
@@ -160,11 +184,17 @@ Create at `$VAULT/projects/$PROJECT/components/{name}.md`:
 ```yaml
 ---
 tags: [components, project/{short-name}]
+type: component
 project: "[[projects/$PROJECT/$PROJECT]]"
 created: {YYYY-MM-DD}
+status: active
+layer: ""
+depends-on: []
+depended-on-by: []
+key-files: []
 ---
 ```
-Sections: Purpose, Key Files, Dependencies (Depends On / Depended On By), Gotchas
+Sections: Purpose, Gotchas
 
 If a name argument is provided, use it as the component name. Otherwise, ask the user.
 
@@ -176,6 +206,7 @@ Create at `$VAULT/projects/$PROJECT/architecture/ADR-{NNNN} {title}.md`:
 ```yaml
 ---
 tags: [architecture, decision, project/{short-name}]
+type: adr
 project: "[[projects/$PROJECT/$PROJECT]]"
 status: proposed
 created: {YYYY-MM-DD}
@@ -220,22 +251,188 @@ Open and update the Active TODOs for the current project.
 
 ## `lookup` — Search the Vault
 
-Search the vault for knowledge. The remaining arguments form the search query.
+Search the vault for knowledge. Supports targeted subcommands and freetext search.
 
-### Steps:
+### Subcommands
 
-1. **Search by content**: Search file contents for the query across all `.md` files in `$VAULT`.
+#### `lookup deps <name>`
 
-2. **Search by tags** (if query looks like a tag, e.g., starts with `#` or `project/`):
+Query what a component depends on.
+
+```bash
+obsidian vault=$VAULT_NAME property:read file="<name>" name="depends-on"
+```
+Fallback: Read the component note and parse the `depends-on` frontmatter list.
+
+#### `lookup consumers <name>`
+
+Query what depends on a component (reverse dependencies).
+
+```bash
+obsidian vault=$VAULT_NAME property:read file="<name>" name="depended-on-by"
+obsidian vault=$VAULT_NAME backlinks file="<name>"
+```
+Combine results — `depended-on-by` gives explicit relationships, `backlinks` catches implicit references. Fallback: Read the component note and search for backlinks via Grep.
+
+#### `lookup related <name>`
+
+Query all notes connected to a given note (both directions).
+
+```bash
+obsidian vault=$VAULT_NAME links file="<name>"
+obsidian vault=$VAULT_NAME backlinks file="<name>"
+```
+Fallback: Read the note and extract wikilinks, then Grep for `[[<name>` across the vault.
+
+#### `lookup type <type> [project]`
+
+Find all notes of a given type (component, adr, session, project).
+
+```bash
+obsidian vault=$VAULT_NAME tag verbose name="<type>"
+```
+If `[project]` is specified, filter results to notes also tagged `project/<short-name>`:
+```bash
+obsidian vault=$VAULT_NAME search query="type: <type>" path="projects/<project>"
+```
+Fallback: Grep for `type: <type>` across `$VAULT`.
+
+#### `lookup layer <layer> [project]`
+
+Find all components in a specific layer.
+
+```bash
+obsidian vault=$VAULT_NAME search query="layer: <layer>" path="projects/<project>"
+```
+If no project specified, search across all projects:
+```bash
+obsidian vault=$VAULT_NAME search query="layer: <layer>" path="projects"
+```
+Fallback: Grep for `layer: <layer>` across `$VAULT/projects/`.
+
+#### `lookup files <component>`
+
+Query key files for a component.
+
+```bash
+obsidian vault=$VAULT_NAME property:read file="<component>" name="key-files"
+```
+Fallback: Read the component note and parse the `key-files` frontmatter list.
+
+#### `lookup <freetext>`
+
+General search across the vault.
+
+```bash
+obsidian vault=$VAULT_NAME search format=json query="<freetext>" matches limit=10
+```
+Fallback: Search file contents for the query across all `.md` files in `$VAULT`.
+
+If the query looks like a tag (starts with `#` or `project/`):
+```bash
+obsidian vault=$VAULT_NAME tags name="<query>"
+```
+
+If the query matches a note name:
+```bash
+obsidian vault=$VAULT_NAME backlinks file="<query>"
+```
+
+**Present results**: Show matching notes with their frontmatter (first ~10 lines) so the user can decide which to read in full.
+
+---
+
+## `relate` — Manage Relationships
+
+Create and query bidirectional relationships between notes via frontmatter properties.
+
+### Supported relationship types
+
+| Forward property | Inverse property |
+|---|---|
+| `depends-on` | `depended-on-by` |
+| `extends` | `extended-by` |
+| `implements` | `implemented-by` |
+| `consumes` | `consumed-by` |
+
+### `relate <source> <target> [type]`
+
+Create a bidirectional relationship between two notes. Default type is `depends-on`/`depended-on-by`.
+
+#### Steps:
+
+1. **Resolve note names**: Use `file=` parameter for note display names. If ambiguity is possible (same name, different folders), use `path=` with full vault-relative path.
+
+2. **Read current property on source** (forward direction):
    ```bash
-   obsidian vault=$VAULT_NAME tags name="$QUERY"
+   obsidian vault=$VAULT_NAME property:read file="<source>" name="<forward-property>"
+   ```
+   Fallback: Read the source note frontmatter.
+
+3. **Check if relationship already exists**: If `<target>` (as a wikilink) is already in the list, skip and report "already related".
+
+4. **Append to source** (forward direction):
+   Build the new list locally by appending `[[<target>]]` to the current values, then set:
+   ```bash
+   obsidian vault=$VAULT_NAME property:set file="<source>" name="<forward-property>" value="<full-list>" type="list"
+   ```
+   Fallback: Edit the source note's frontmatter directly.
+
+5. **Read current property on target** (inverse direction):
+   ```bash
+   obsidian vault=$VAULT_NAME property:read file="<target>" name="<inverse-property>"
    ```
 
-3. **Search by backlinks** (if query matches a note name):
+6. **Append to target** (inverse direction):
    ```bash
-   obsidian vault=$VAULT_NAME backlinks file="$QUERY"
+   obsidian vault=$VAULT_NAME property:set file="<target>" name="<inverse-property>" value="<full-list>" type="list"
    ```
 
-4. **Present results**: Show matching notes with their frontmatter (first ~10 lines) so the user can decide which to read in full.
+7. **Report** the created relationship.
 
-5. **Follow up**: If the user asks to read a specific result, read the full note.
+**Safety**: Always read-then-set. Never blind-append. The full list is constructed locally and set atomically.
+
+### `relate show <name>`
+
+Display all relationships for a note.
+
+#### Steps:
+
+1. **Query all 8 relationship properties**:
+   ```bash
+   obsidian vault=$VAULT_NAME property:read file="<name>" name="depends-on"
+   obsidian vault=$VAULT_NAME property:read file="<name>" name="depended-on-by"
+   obsidian vault=$VAULT_NAME property:read file="<name>" name="extends"
+   obsidian vault=$VAULT_NAME property:read file="<name>" name="extended-by"
+   obsidian vault=$VAULT_NAME property:read file="<name>" name="implements"
+   obsidian vault=$VAULT_NAME property:read file="<name>" name="implemented-by"
+   obsidian vault=$VAULT_NAME property:read file="<name>" name="consumes"
+   obsidian vault=$VAULT_NAME property:read file="<name>" name="consumed-by"
+   ```
+   Fallback: Read the note frontmatter and parse all relationship properties.
+
+2. **Query structural links**:
+   ```bash
+   obsidian vault=$VAULT_NAME links file="<name>"
+   obsidian vault=$VAULT_NAME backlinks file="<name>"
+   ```
+
+3. **Present results** grouped by relationship type. Show explicit (property) relationships first, then structural (wikilink) relationships that aren't already covered.
+
+### `relate tree <name> [depth]`
+
+Walk the dependency tree via BFS. Default depth is 2.
+
+#### Steps:
+
+1. **Initialize BFS**: Start with `<name>` at depth 0. Maintain a visited set and a queue.
+
+2. **For each node in the queue**:
+   ```bash
+   obsidian vault=$VAULT_NAME property:read file="<current>" name="depends-on"
+   ```
+   Fallback: Read the note and parse `depends-on` from frontmatter.
+
+3. **Add unvisited dependencies** to the queue at `current_depth + 1`. Stop when `depth` limit is reached.
+
+4. **Present** the tree as an indented list showing the dependency chain.

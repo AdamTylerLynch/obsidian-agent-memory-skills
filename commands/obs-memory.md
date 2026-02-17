@@ -1,6 +1,6 @@
 ---
-description: "Manage your Obsidian agent memory vault — initialize, write session summaries, scaffold projects, create notes, update TODOs, and search vault knowledge."
-argument-hint: "<init|end|project|note|todo|lookup> [args]"
+description: "Manage your Obsidian agent memory vault — initialize, write session summaries, scaffold projects, create notes, update TODOs, search vault knowledge, and manage relationships."
+argument-hint: "<init|end|project|note|todo|lookup|relate> [args]"
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash(git log:*), Bash(git diff:*), Bash(git rev-parse:*), Bash(git branch:*), Bash(basename:*), Bash(obsidian:*), Bash(date:*), Bash(cp:*), Bash(mkdir:*), Bash(cat:*), Bash(touch:*)
 ---
 
@@ -18,6 +18,11 @@ Before any subcommand, resolve the vault path:
 3. Default: `~/Documents/AgentMemory`
 
 Store as `$VAULT`. Verify `$VAULT/Home.md` exists. If not, suggest running `/obs-memory init` to bootstrap the vault.
+
+Derive `$VAULT_NAME` (for CLI calls):
+```bash
+VAULT_NAME=$(basename "$VAULT")
+```
 
 Detect the current project:
 ```bash
@@ -97,7 +102,11 @@ Write a session summary note and update TODOs.
    git branch --show-current
    ```
 
-2. **Read current TODOs:**
+2. **Read current TODOs** — CLI-first:
+   ```bash
+   obsidian vault=$VAULT_NAME tasks path="todos" todo verbose
+   ```
+   Fallback:
    ```
    Read: $VAULT/todos/Active TODOs.md
    ```
@@ -107,10 +116,22 @@ Write a session summary note and update TODOs.
    Read: $VAULT/projects/$PROJECT/$PROJECT.md
    ```
 
-4. **Write session note** at `$VAULT/sessions/{YYYY-MM-DD} - {title}.md`:
+4. **Write session note** — CLI-first:
+   ```bash
+   obsidian vault=$VAULT_NAME create path="sessions/{YYYY-MM-DD} - {title}" template="Session Note" silent
+   obsidian vault=$VAULT_NAME property:set path="sessions/{YYYY-MM-DD} - {title}" name="type" value="session" type="text"
+   obsidian vault=$VAULT_NAME property:set path="sessions/{YYYY-MM-DD} - {title}" name="branch" value="{current-branch}" type="text"
+   obsidian vault=$VAULT_NAME property:set path="sessions/{YYYY-MM-DD} - {title}" name="projects" value="[[projects/$PROJECT/$PROJECT]]" type="list"
+   ```
+   Then append body content:
+   ```bash
+   obsidian vault=$VAULT_NAME append path="sessions/{YYYY-MM-DD} - {title}" content="..."
+   ```
+   Fallback: Write the file directly at `$VAULT/sessions/{YYYY-MM-DD} - {title}.md`:
    ```yaml
    ---
    tags: [sessions]
+   type: session
    projects:
      - "[[projects/$PROJECT/$PROJECT]]"
    created: {YYYY-MM-DD}
@@ -160,10 +181,13 @@ Scaffold a new project in the vault. Uses `$ARGUMENTS[1]` as the project name, o
    ---
    aliases: []
    tags: [project/{short-name}]
+   type: project
    repo: {git remote url if available}
    path: {working directory}
    language: {detected from files}
+   framework:
    created: {YYYY-MM-DD}
+   status: active
    ---
    ```
    Sections: Architecture, Components, Project Patterns, Architecture Decisions, Domains
@@ -189,11 +213,17 @@ Create at `$VAULT/projects/$PROJECT/components/{name}.md`:
 ```yaml
 ---
 tags: [components, project/{short-name}]
+type: component
 project: "[[projects/$PROJECT/$PROJECT]]"
 created: {YYYY-MM-DD}
+status: active
+layer: ""
+depends-on: []
+depended-on-by: []
+key-files: []
 ---
 ```
-Sections: Purpose, Key Files, Dependencies (Depends On / Depended On By), Gotchas
+Sections: Purpose, Gotchas
 
 If `$ARGUMENTS[2]` is provided, use it as the component name. Otherwise, ask the user.
 
@@ -208,6 +238,7 @@ Create at `$VAULT/projects/$PROJECT/architecture/ADR-{NNNN} {title}.md`:
 ```yaml
 ---
 tags: [architecture, decision, project/{short-name}]
+type: adr
 project: "[[projects/$PROJECT/$PROJECT]]"
 status: proposed
 created: {YYYY-MM-DD}
@@ -255,28 +286,185 @@ Open and update the Active TODOs for the current project.
 
 ## `lookup` — Search the Vault
 
-Search the vault for knowledge. `$ARGUMENTS[1..]` is the search query.
+Search the vault for knowledge. `$ARGUMENTS[1..]` specifies the subcommand or search query.
 
-### Steps:
+### Subcommands
 
-1. **Search by content**:
-   ```
-   Grep: pattern=$QUERY, path=$VAULT, glob="*.md"
-   ```
+#### `lookup deps <name>`
 
-2. **Search by tags** (if query looks like a tag, e.g., starts with `#` or `project/`):
+Query what a component depends on.
+```bash
+obsidian vault=$VAULT_NAME property:read file="<name>" name="depends-on"
+```
+Fallback: Read the component note and parse `depends-on` from frontmatter.
+
+#### `lookup consumers <name>`
+
+Query reverse dependencies.
+```bash
+obsidian vault=$VAULT_NAME property:read file="<name>" name="depended-on-by"
+obsidian vault=$VAULT_NAME backlinks file="<name>"
+```
+Combine results. Fallback: Read the component note and Grep for backlinks.
+
+#### `lookup related <name>`
+
+All connected notes (both directions).
+```bash
+obsidian vault=$VAULT_NAME links file="<name>"
+obsidian vault=$VAULT_NAME backlinks file="<name>"
+```
+Fallback: Read the note for wikilinks, Grep for `[[<name>` across vault.
+
+#### `lookup type <type> [project]`
+
+Find notes by type (component, adr, session, project).
+```bash
+obsidian vault=$VAULT_NAME tag verbose name="<type>"
+```
+With project filter:
+```bash
+obsidian vault=$VAULT_NAME search query="type: <type>" path="projects/<project>"
+```
+Fallback:
+```
+Grep: pattern="type: <type>", path=$VAULT, glob="*.md"
+```
+
+#### `lookup layer <layer> [project]`
+
+Find components by architectural layer.
+```bash
+obsidian vault=$VAULT_NAME search query="layer: <layer>" path="projects/<project>"
+```
+Fallback:
+```
+Grep: pattern="layer: <layer>", path=$VAULT/projects/, glob="*.md"
+```
+
+#### `lookup files <component>`
+
+Key files for a component.
+```bash
+obsidian vault=$VAULT_NAME property:read file="<component>" name="key-files"
+```
+Fallback: Read the component note and parse `key-files` from frontmatter.
+
+#### `lookup <freetext>`
+
+General search.
+```bash
+obsidian vault=$VAULT_NAME search format=json query="<freetext>" matches limit=10
+```
+Fallback:
+```
+Grep: pattern=$QUERY, path=$VAULT, glob="*.md"
+```
+
+If query looks like a tag:
+```bash
+obsidian vault=$VAULT_NAME tags name="<query>"
+```
+
+If query matches a note name:
+```bash
+obsidian vault=$VAULT_NAME backlinks file="<query>"
+```
+
+**Present results**: Show matching notes with frontmatter (first 10 lines) so the user can decide which to read in full.
+
+---
+
+## `relate` — Manage Relationships
+
+Create and query bidirectional relationships between notes via frontmatter properties.
+
+### Supported relationship types
+
+| Forward property | Inverse property |
+|---|---|
+| `depends-on` | `depended-on-by` |
+| `extends` | `extended-by` |
+| `implements` | `implemented-by` |
+| `consumes` | `consumed-by` |
+
+### `relate <source> <target> [type]`
+
+Create a bidirectional relationship. Default type: `depends-on`/`depended-on-by`.
+
+#### Steps:
+
+1. **Resolve note names**: Use `file=` for display names. Use `path=` for disambiguation.
+
+2. **Read current property on source**:
    ```bash
-   obsidian vault=$VAULT_NAME tags name="$QUERY"
+   obsidian vault=$VAULT_NAME property:read file="<source>" name="<forward-property>"
    ```
+   Fallback: Read source note frontmatter.
 
-3. **Search by backlinks** (if query matches a note name):
+3. **Check for existing relationship**: If target already in list, report "already related".
+
+4. **Set on source** (forward):
+   Build full list locally (current values + new entry), then:
    ```bash
-   obsidian vault=$VAULT_NAME backlinks file="$QUERY"
+   obsidian vault=$VAULT_NAME property:set file="<source>" name="<forward-property>" value="<full-list>" type="list"
+   ```
+   Fallback: Edit source note frontmatter directly.
+
+5. **Read current property on target**:
+   ```bash
+   obsidian vault=$VAULT_NAME property:read file="<target>" name="<inverse-property>"
    ```
 
-4. **Present results**: Show matching notes with their frontmatter (first 10 lines) so the user can decide which to read in full.
+6. **Set on target** (inverse):
+   ```bash
+   obsidian vault=$VAULT_NAME property:set file="<target>" name="<inverse-property>" value="<full-list>" type="list"
+   ```
 
-5. **Follow up**: If the user asks to read a specific result, read the full note.
+7. **Report** the created relationship.
+
+**Safety**: Always read-then-set. Never blind-append.
+
+### `relate show <name>`
+
+Display all relationships for a note.
+
+1. **Query all 8 relationship properties**:
+   ```bash
+   obsidian vault=$VAULT_NAME property:read file="<name>" name="depends-on"
+   obsidian vault=$VAULT_NAME property:read file="<name>" name="depended-on-by"
+   obsidian vault=$VAULT_NAME property:read file="<name>" name="extends"
+   obsidian vault=$VAULT_NAME property:read file="<name>" name="extended-by"
+   obsidian vault=$VAULT_NAME property:read file="<name>" name="implements"
+   obsidian vault=$VAULT_NAME property:read file="<name>" name="implemented-by"
+   obsidian vault=$VAULT_NAME property:read file="<name>" name="consumes"
+   obsidian vault=$VAULT_NAME property:read file="<name>" name="consumed-by"
+   ```
+   Fallback: Read note frontmatter.
+
+2. **Query structural links**:
+   ```bash
+   obsidian vault=$VAULT_NAME links file="<name>"
+   obsidian vault=$VAULT_NAME backlinks file="<name>"
+   ```
+
+3. **Present** grouped by relationship type.
+
+### `relate tree <name> [depth]`
+
+BFS walk of the dependency tree. Default depth: 2.
+
+1. **Initialize**: Start with `<name>` at depth 0. Maintain visited set and queue.
+
+2. **For each node**:
+   ```bash
+   obsidian vault=$VAULT_NAME property:read file="<current>" name="depends-on"
+   ```
+   Fallback: Read note, parse `depends-on`.
+
+3. **Add unvisited deps** to queue at `current_depth + 1`. Stop at depth limit.
+
+4. **Present** as indented tree.
 
 ---
 
@@ -286,3 +474,4 @@ Search the vault for knowledge. `$ARGUMENTS[1..]` is the search query.
 - If the project doesn't exist in the vault → offer to run `/obs-memory project` to scaffold it
 - If a note already exists → show it instead of overwriting, offer to edit
 - If no git repo is detected → use current directory name as project name
+- If CLI command fails → fall back to file read for the same data

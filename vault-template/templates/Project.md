@@ -1,10 +1,13 @@
 ---
 aliases: []
 tags: [project/{{short-name}}]
+type: project
 repo:
 path:
 language:
+framework:
 created: {{date}}
+status: active
 ---
 
 # {{project-name}}

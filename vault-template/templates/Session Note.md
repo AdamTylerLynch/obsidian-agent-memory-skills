@@ -1,5 +1,6 @@
 ---
 tags: [sessions]
+type: session
 projects:
   - "[[projects/{{project-name}}/{{project-name}}]]"
 created: {{date}}
