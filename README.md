@@ -37,7 +37,7 @@ Initialize my Obsidian memory vault
 Or in Claude Code:
 
 ```
-/obs-memory init
+/obs init
 ```
 
 Or use the setup script directly:
@@ -86,13 +86,13 @@ Loaded automatically when the agent detects vault-relevant context. Handles:
 | `todo [action]` | View and update project TODOs |
 | `lookup [query]` | Search the vault by content, tags, or backlinks |
 
-In Claude Code, these are available as `/obs-memory <command>`. In other agents, use natural language (e.g., "write a session summary to the vault").
+In Claude Code, these are available as `/obs <command>`. In other agents, use natural language (e.g., "write a session summary to the vault").
 
 ## Agent Compatibility
 
 | Agent | How it works |
 |---|---|
-| **Claude Code** | Full support — proactive skill + `/obs-memory` slash command |
+| **Claude Code** | Full support — proactive skill + `/obs` slash command |
 | **Cursor** | Skill loaded via skills.sh, responds to natural language commands |
 | **Cline** | Skill loaded via skills.sh, responds to natural language commands |
 | **Windsurf** | Skill loaded via skills.sh, responds to natural language commands |
@@ -112,11 +112,11 @@ Start a session in any project directory. If the project has notes in the vault,
 
 ### End-of-session summary
 
-Ask your agent to write a session summary (or use `/obs-memory end` in Claude Code). The agent examines your git log and diffs, writes a session note, and updates your TODOs.
+Ask your agent to write a session summary (or use `/obs end` in Claude Code). The agent examines your git log and diffs, writes a session note, and updates your TODOs.
 
 ### Scaffold a new project
 
-Ask the agent to create a project in your vault (or use `/obs-memory project my-app` in Claude Code). Creates:
+Ask the agent to create a project in your vault (or use `/obs project my-app` in Claude Code). Creates:
 ```
 projects/my-app/
 ├── my-app.md          # Project overview (auto-filled)
@@ -127,7 +127,7 @@ projects/my-app/
 
 ### Search vault knowledge
 
-Ask the agent to search your vault for a topic (or use `/obs-memory lookup PKCS12` in Claude Code). Searches across all notes, showing matches with frontmatter context.
+Ask the agent to search your vault for a topic (or use `/obs lookup PKCS12` in Claude Code). Searches across all notes, showing matches with frontmatter context.
 
 ## How It Works
 
@@ -193,7 +193,7 @@ obsidian-agent-memory-skills/
 │       └── references/
 │           └── commands.md           # Detailed command procedures
 ├── commands/
-│   └── obs-memory.md                 # Claude Code slash command (/obs-memory)
+│   └── obs.md                        # Claude Code slash command (/obs)
 ├── vault-template/                   # Bundled vault template
 │   ├── Home.md
 │   ├── projects/Projects.md

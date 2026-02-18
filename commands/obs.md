@@ -4,9 +4,9 @@ argument-hint: "<init|end|project|note|todo|lookup> [args]"
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash(git log:*), Bash(git diff:*), Bash(git rev-parse:*), Bash(git branch:*), Bash(basename:*), Bash(obsidian:*), Bash(date:*), Bash(cp:*), Bash(mkdir:*), Bash(cat:*), Bash(touch:*)
 ---
 
-# /obs-memory — Vault Management Commands (Claude Code)
+# /obs — Vault Management Commands (Claude Code)
 
-> **Note:** This is the Claude Code-specific command file providing the `/obs-memory` slash command with Claude Code tool permissions and argument hints. For the agent-agnostic skill definition, see `skills/obs-memory/SKILL.md`.
+> **Note:** This is the Claude Code-specific command file providing the `/obs` slash command with Claude Code tool permissions and argument hints. For the agent-agnostic skill definition, see `skills/obs-memory/SKILL.md`.
 
 Dispatch based on `$ARGUMENTS[0]`:
 
@@ -17,7 +17,7 @@ Before any subcommand, resolve the vault path:
 2. Parse from project or global CLAUDE.md (look for "Obsidian Knowledge Vault" section)
 3. Default: `~/Documents/AgentMemory`
 
-Store as `$VAULT`. Verify `$VAULT/Home.md` exists. If not, suggest running `/obs-memory init` to bootstrap the vault.
+Store as `$VAULT`. Verify `$VAULT/Home.md` exists. If not, suggest running `/obs init` to bootstrap the vault.
 
 Detect the current project:
 ```bash
@@ -282,7 +282,7 @@ Search the vault for knowledge. `$ARGUMENTS[1..]` is the search query.
 
 ## Error Handling
 
-- If the vault doesn't exist → suggest running `/obs-memory init` to bootstrap it
-- If the project doesn't exist in the vault → offer to run `/obs-memory project` to scaffold it
+- If the vault doesn't exist → suggest running `/obs init` to bootstrap it
+- If the project doesn't exist in the vault → offer to run `/obs project` to scaffold it
 - If a note already exists → show it instead of overwriting, offer to edit
 - If no git repo is detected → use current directory name as project name
