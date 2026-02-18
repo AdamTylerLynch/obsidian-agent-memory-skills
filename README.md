@@ -173,7 +173,6 @@ projects/my-app/
 
 ### Search vault knowledge
 
-Ask the agent to search your vault for a topic (or use `/obs lookup PKCS12` in Claude Code). Searches across all notes, showing matches with frontmatter context.
 Ask the agent to search your vault (or use `/obs lookup PKCS12` in Claude Code). Supports targeted subcommands:
 ```
 /obs lookup deps AuthMiddleware        # What does it depend on?
