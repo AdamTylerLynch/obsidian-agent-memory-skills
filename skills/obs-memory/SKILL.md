@@ -1,6 +1,6 @@
 ---
 name: obs-memory
-description: "Persistent Obsidian-based memory for coding agents. Use at session start to orient from a knowledge vault, during work to look up architecture/component/pattern notes, and when discoveries are made to write them back. Activate when the user mentions obsidian memory, obsidian vault, obsidian notes, or /obs commands. Provides commands: init, recap, project, note, todo, lookup, relate."
+description: "Persistent Obsidian-based memory for coding agents. Use at session start to orient from a knowledge vault, during work to look up architecture/component/pattern notes, and when discoveries are made to write them back. Activate when the user mentions obsidian memory, obsidian vault, obsidian notes, or /obs commands. Provides commands: init, analyze, recap, project, note, todo, lookup, relate."
 metadata:
   author: adamtylerlynch
   version: "2.1"
@@ -263,6 +263,138 @@ Bootstrap a new Obsidian Agent Memory vault from the bundled template.
 9. **Auto-scaffold current project**: If inside a git repo, automatically run the `project` command to scaffold the current project in the vault.
 
 10. **Concise output**: Keep the final output to 5-8 lines max: vault path created, project scaffolded (if applicable), how to open in Obsidian, how to set the vault path.
+
+### `analyze` — Analyze Project & Hydrate Vault
+
+Analyze the current codebase and populate the vault with interconnected, content-rich notes.
+
+**Usage**: `analyze` (no arguments — uses current repo)
+
+#### Phase 1: Discovery — Scan for Knowledge Sources
+
+Scan the repo for files that contain pre-existing knowledge:
+
+| Category | Files to scan |
+|---|---|
+| Agent configs | `CLAUDE.md`, `.claude/CLAUDE.md`, `.cursorrules`, `.windsurfrules`, `.clinerules`, `AGENTS.md`, `Agents.md` |
+| Documentation | `README.md`, `CONTRIBUTING.md`, `ARCHITECTURE.md`, `docs/architecture.md`, `docs/ARCHITECTURE.md` |
+| Existing ADRs | `docs/adr/ADR-*.md`, `architecture/ADR-*.md`, `adr/*.md`, `docs/decisions/*.md` |
+| Project metadata | `package.json`, `go.mod`, `Cargo.toml`, `pyproject.toml`, `setup.py`, `Gemfile`, `pom.xml`, `build.gradle`, `*.csproj` |
+| Build/CI | `Makefile`, `Dockerfile`, `docker-compose.yml`, `.github/workflows/*.yml`, `.gitlab-ci.yml` |
+| Config | `tsconfig.json`, `.eslintrc.*`, `jest.config.*`, `.goreleaser.yml` |
+
+Read each discovered file. For large files (README, agent configs), read fully. For metadata files, extract key fields (name, version, dependencies).
+
+Also gather:
+- Repo URL from `git remote get-url origin`
+- Repo root path from `git rev-parse --show-toplevel`
+- Active branch from `git branch --show-current`
+- Directory tree (top 2 levels of source directories, excluding hidden/vendor/node_modules)
+- File extension frequency (for language detection)
+
+#### Phase 2: Analysis — Extract & Synthesize
+
+Using the discovered content, synthesize:
+
+1. **Project metadata**: name, language(s), framework(s), repo URL, local path
+2. **Architecture summary**: Entry points, layer organization (e.g., `internal/` → Go service layers, `src/components/` → React app), build system
+3. **Component inventory**: Major functional modules — each top-level source directory or logical grouping that represents a distinct unit. For each: purpose (from README/agent config context), key files, and relationships
+4. **Pattern inventory**: Coding conventions, error handling strategies, testing approaches — extracted from agent config files (CLAUDE.md sections like "Coding Guidelines", "Testing", etc.)
+5. **Domain mapping**: Detected technologies → vault domain notes (e.g., Go, TypeScript, Terraform, React)
+6. **Existing decisions**: ADR files found in the repo → import as vault ADR notes
+7. **Dependency summary**: Key dependencies from package manifests (listed in project overview, not separate notes)
+
+#### Phase 3: Hydration — Write Vault Notes
+
+**Idempotency rules:**
+- If project directory doesn't exist → create everything (scaffold + populate)
+- If project directory exists but overview is a skeleton → **replace** overview with populated version
+- If individual component/pattern/ADR notes already exist → **skip** and report (don't overwrite manual work)
+- Domain notes: create if missing, **append** project link if existing
+
+**Notes to write:**
+
+1. **Project overview** (`$VAULT/projects/{name}/{name}.md`) — Fully populated:
+   ```yaml
+   ---
+   aliases: []
+   tags: [project/{short-name}]
+   type: project
+   repo: {git remote url}
+   path: {repo root path}
+   language: {detected language(s)}
+   framework: {detected framework(s)}
+   created: {YYYY-MM-DD}
+   status: active
+   ---
+   ```
+   Sections:
+   - **Architecture**: Real description from analysis
+   - **Components**: Table with wikilinks to component notes
+   - **Project Patterns**: Table with wikilinks to pattern notes
+   - **Architecture Decisions**: List with wikilinks to ADR notes
+   - **Key Dependencies**: From package manifests
+   - **Domains**: Wikilinks to domain notes
+
+2. **Component notes** (`$VAULT/projects/{name}/components/{Component}.md`) — One per major module:
+   ```yaml
+   ---
+   tags: [components, project/{short-name}]
+   type: component
+   project: "[[projects/{name}/{name}]]"
+   created: {YYYY-MM-DD}
+   status: active
+   layer: {detected layer}
+   depends-on: []
+   depended-on-by: []
+   key-files: [{key files list}]
+   ---
+   ```
+   Sections: Purpose, Gotchas
+
+3. **Pattern notes** (`$VAULT/projects/{name}/patterns/{Pattern}.md`) — From agent config conventions:
+   ```yaml
+   ---
+   tags: [patterns, project/{short-name}]
+   project: "[[projects/{name}/{name}]]"
+   created: {YYYY-MM-DD}
+   ---
+   ```
+   Sections: Pattern, When to Use, Implementation
+
+4. **ADR imports** (`$VAULT/projects/{name}/architecture/ADR-{NNNN} {title}.md`) — From existing repo ADRs:
+   ```yaml
+   ---
+   tags: [architecture, decision, project/{short-name}]
+   type: adr
+   project: "[[projects/{name}/{name}]]"
+   status: accepted
+   created: {YYYY-MM-DD}
+   ---
+   ```
+   Preserve original content, add vault frontmatter.
+
+5. **Domain notes** (`$VAULT/domains/{tech}/{Tech}.md`):
+   - If new: create with project link
+   - If existing: add this project to "Projects Using This Domain" section
+
+6. **Index updates**:
+   - `$VAULT/projects/Projects.md` — add/update row
+   - `$VAULT/domains/Domains.md` — add/update rows for new domains
+
+#### Phase 4: Report
+
+Print a summary:
+```
+Analyzed: {project-name}
+  Sources read: {N} knowledge files
+  Created: project overview (populated)
+  Created: {N} component notes
+  Created: {N} pattern notes
+  Imported: {N} architecture decisions
+  Linked: {N} domain notes
+  Skipped: {N} existing notes (preserved)
+```
 
 ### `recap` — Write Session Summary
 

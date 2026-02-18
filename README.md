@@ -13,6 +13,7 @@ Works with **any agent** that supports the [Agent Skills](https://agentskills.io
 - **Bidirectional relationships** — `relate` command manages `depends-on`/`depended-on-by`, `extends`/`extended-by`, `implements`/`implemented-by`, `consumes`/`consumed-by` with BFS tree walking
 - **Structured lookups** — `lookup` subcommands for deps, consumers, related notes, type/layer filtering, key files, and freetext search
 - **Automatic behaviors** — session end detection, component discovery offers, first-run guidance
+- **Project analysis** — `analyze` command scans your repo and hydrates the vault with populated notes from README, CLAUDE.md, ADRs, and source structure
 - **Token-optimized** — frontmatter-first scanning, CLI over file reads, scoped navigation
 
 ## Installation
@@ -97,8 +98,9 @@ These work without explicit commands:
 | Command | Description |
 |---|---|
 | `init [path]` | Initialize a new vault from the bundled template |
+| `analyze` | Analyze the current project and hydrate the vault with populated notes |
 | `recap` | Write a session summary from git history, update TODOs |
-| `project [name]` | Scaffold a new project in the vault |
+| `project [name]` | Scaffold a new (empty) project in the vault |
 | `note component [name]` | Create a component note from template |
 | `note adr [title]` | Create an architecture decision record |
 | `note pattern [name]` | Create a pattern note |
@@ -144,13 +146,29 @@ Ask your agent to write a session summary (or use `/obs recap` in Claude Code). 
 
 ### Scaffold a new project
 
-Ask the agent to create a project in your vault (or use `/obs project my-app` in Claude Code). Creates:
+Ask the agent to create a project in your vault (or use `/obs project my-app` in Claude Code). Creates an empty scaffold:
 ```
 projects/my-app/
-├── my-app.md          # Project overview (auto-filled)
+├── my-app.md          # Project overview (placeholder sections)
 ├── architecture/
 ├── components/
 └── patterns/
+```
+
+### Analyze a project
+
+Run `/obs analyze` in Claude Code (or ask "analyze this project and populate the vault"). The agent scans your repo for README, CLAUDE.md, package manifests, ADRs, and source structure, then writes **populated** vault notes:
+```
+projects/my-app/
+├── my-app.md          # Populated overview with architecture, deps, domain links
+├── architecture/
+│   └── ADR-0001 Use React Query.md    # Imported from repo
+├── components/
+│   ├── API Layer.md                    # Extracted from source structure
+│   └── Auth Module.md
+└── patterns/
+    ├── Error Handling.md              # Extracted from CLAUDE.md conventions
+    └── Testing Strategy.md
 ```
 
 ### Search vault knowledge

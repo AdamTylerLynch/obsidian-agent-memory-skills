@@ -1,7 +1,7 @@
 ---
-description: "Manage your Obsidian agent memory vault — initialize, write session summaries, scaffold projects, create notes, update TODOs, search vault knowledge, and manage relationships."
-argument-hint: "<init|recap|project|note|todo|lookup|relate> [args]"
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash(git log:*), Bash(git diff:*), Bash(git rev-parse:*), Bash(git branch:*), Bash(git remote:*), Bash(basename:*), Bash(obsidian:*), Bash(date:*), Bash(cp:*), Bash(mkdir:*), Bash(cat:*), Bash(touch:*)
+description: "Manage your Obsidian agent memory vault — initialize, analyze projects, write session summaries, scaffold projects, create notes, update TODOs, search vault knowledge, and manage relationships."
+argument-hint: "<init|analyze|recap|project|note|todo|lookup|relate> [args]"
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash(git log:*), Bash(git diff:*), Bash(git rev-parse:*), Bash(git branch:*), Bash(git remote:*), Bash(basename:*), Bash(obsidian:*), Bash(date:*), Bash(cp:*), Bash(mkdir:*), Bash(cat:*), Bash(touch:*), Bash(wc:*), Bash(ls:*), Bash(find:*)
 ---
 
 # /obs — Vault Management (Claude Code)
@@ -28,6 +28,7 @@ Execute the matching command procedure from the obs-memory skill (`skills/obs-me
 | `$ARGUMENTS[0]` | Skill procedure |
 |---|---|
 | `init` | `init` — pass `$ARGUMENTS[1]` as path |
+| `analyze` | `analyze` |
 | `recap` | `recap` |
 | `project` | `project` — pass `$ARGUMENTS[1]` as name |
 | `note` | `note` — pass `$ARGUMENTS[1]` as type, `$ARGUMENTS[2]` as name |
