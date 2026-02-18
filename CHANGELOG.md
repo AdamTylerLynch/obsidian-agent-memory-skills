@@ -2,6 +2,18 @@
 
 All notable changes to obs-memory are documented here.
 
+## [2.2.0] — 2026-02-17
+
+### Added
+
+- **`analyze` command** — scans the current repo for knowledge sources (CLAUDE.md, README, ADRs, package manifests, CI configs), analyzes project structure, and writes populated vault notes (project overview, components, patterns, ADR imports, domain links) with idempotency to preserve existing manual work
+- `Bash(ls:*)` added to allowed-tools (needed by `analyze` for directory listing)
+- `type: pattern` added to pattern note frontmatter convention
+
+### Fixed
+
+- Duplicate paragraph in README "Search vault knowledge" section
+
 ## [2.1.0] — 2026-02-16
 
 ### Breaking Changes

@@ -3,7 +3,7 @@ name: obs-memory
 description: "Persistent Obsidian-based memory for coding agents. Use at session start to orient from a knowledge vault, during work to look up architecture/component/pattern notes, and when discoveries are made to write them back. Activate when the user mentions obsidian memory, obsidian vault, obsidian notes, or /obs commands. Provides commands: init, analyze, recap, project, note, todo, lookup, relate."
 metadata:
   author: adamtylerlynch
-  version: "2.1"
+  version: "2.2"
 license: MIT
 ---
 
