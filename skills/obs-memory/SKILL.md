@@ -356,6 +356,7 @@ Using the discovered content, synthesize:
    ```yaml
    ---
    tags: [patterns, project/{short-name}]
+   type: pattern
    project: "[[projects/{name}/{name}]]"
    created: {YYYY-MM-DD}
    ---

@@ -1,7 +1,7 @@
 ---
 description: "Manage your Obsidian agent memory vault — initialize, analyze projects, write session summaries, scaffold projects, create notes, update TODOs, search vault knowledge, and manage relationships."
 argument-hint: "<init|analyze|recap|project|note|todo|lookup|relate> [args]"
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash(git log:*), Bash(git diff:*), Bash(git rev-parse:*), Bash(git branch:*), Bash(git remote:*), Bash(basename:*), Bash(obsidian:*), Bash(date:*), Bash(cp:*), Bash(mkdir:*), Bash(cat:*), Bash(touch:*), Bash(wc:*), Bash(ls:*), Bash(find:*)
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash(git log:*), Bash(git diff:*), Bash(git rev-parse:*), Bash(git branch:*), Bash(git remote:*), Bash(basename:*), Bash(obsidian:*), Bash(date:*), Bash(cp:*), Bash(mkdir:*), Bash(cat:*), Bash(touch:*), Bash(ls:*)
 ---
 
 # /obs — Vault Management (Claude Code)
